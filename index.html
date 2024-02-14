@@ -1,0 +1,995 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            flex-direction: column; /* Arrange elements vertically */
+        }
+        .main-container {
+            display: flex;
+            justify-content: center;
+            align-items: flex-start; /* Align the top edges of canvas and button container */
+        }
+        .canvas-container {
+            position: relative;
+        }
+        #color-button-container {
+            position: relative; /* Position the button container absolutely */
+            top: 50%; /* Start at the vertical center of the main container */
+            transform: translateY(-50%); /* Offset the container by half its height to center vertically */
+            margin-left:30px;
+            display: flex;
+            flex-direction: column; /* Stack color buttons vertically */
+            align-items: center; /* Center buttons */
+            padding:10px;
+            border:1px solid gray;
+            border-radius: 35px;  /*25+10*/
+            transition:0.5s;
+        }
+        #color-button-container:hover{
+            box-shadow:0px 0px 8px rgba(0,0,0,0.4);
+            transition:0.3s
+        }
+        #color-button-container button {
+            margin: 10px 0; /* Spacing between buttons */
+            width: 40px; /* Width of buttons */
+            height: 40px; /* Height of buttons, making them square */
+            border-radius: 50%; /* Make buttons circular */
+            border: none; /* Remove border */
+            cursor: pointer;
+            transition:0.5s;
+            opacity: 0.2;
+        }
+        #color-button-container button:hover{
+            transition:0.5s;
+            opacity:0.6;
+        }
+        #color-button-container .active-color{
+            opacity: 1;
+        }
+        canvas {
+            border: 3px solid #000;
+        }
+        .grid {
+            margin-top: 20px;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr); /* 3 columns */
+            gap: 10px;
+        }
+        button, input, label {
+            width: 200px;
+            height: 60px;
+            margin: 5px;
+            padding: 10px;
+            border: 1px solid #000;
+            border-radius: 5px;
+            cursor: pointer;
+            background-color: #fff;
+            color: #000;
+        }
+        input, label{
+            display:block;
+            box-sizing:border-box;
+        }
+        label {
+            height: auto; /* Adjust the height to be auto */
+            line-height: 40px; /* Center text vertically */
+            text-align: center;
+            border:none;
+            /* padding-right: 5px; Add some right padding */
+        }
+        #slider-container {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          user-select: none;
+          position: relative;
+          width: 200px;
+          height: 60px;
+          border: 2px solid #000;
+          overflow:hidden;
+          margin:5px;
+          border:1px solid #000;
+          border-radius: 5px;
+        }
+        #left-number {
+          left: 50%;
+          transform: translateX(-85%); /* Positioned to the left outside the container */
+        }
+        #center-number {
+          left: 50%;
+          transform: translateX(-50%); /* Center inside the container */
+        }
+        #right-number {
+          left: 50%;
+          transform: translateX(-15%); /* Positioned to the right outside the container */
+        }
+        .number {
+          position: absolute;
+          width: 200px; /* Same as the container for center alignment */
+          font-size: 32px;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+        }
+        .number.gray {
+          color: #a0a0a0;
+          opacity: 0; /* Start as invisible */
+          transition: opacity 0.5s ease-out;
+          font-size:24px;
+        }
+        .active {
+            background-color: #4CAF50;
+            color: #fff;
+            border: 1px solid #4CAF50;
+        }
+        button:hover:not(.active) {
+            background-color: #000;
+            color: #fff;
+        }
+        .main-container{
+            margin-left: 80px;  /*30+40+10 */
+        }
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <div class="canvas-container">
+            <canvas id="myCanvas" width="480" height="320"></canvas>
+        </div>
+        <div id="color-button-container">
+            <button id="btnRed" style="background-color: red;" onclick="changeBallColor('#dd0095')"></button>
+            <button id="btnGreen" style="background-color: green;" onclick="changeBallColor('#4CAF50')"></button>
+            <button id="btnBlue" style="background-color: blue;" class="active-color" onclick="changeBallColor('#0095dd')"></button>
+        </div>
+    </div>
+    <div class="grid">
+        <label for="numBalls">Number of balls:</label>
+        <div id="slider-container">
+          <div id="left-number" class="number gray">11</div>
+          <div id="center-number" class="number">12</div>
+          <div id="right-number" class="number gray">13</div>
+        </div>
+        <button onclick="initBalls()">Start</button>
+        <button id="btnRectangle" class="active" onclick="setWallType('rectangle')">Rectangle</button>
+        <button id="btnLine" onclick="setWallType('line')">Line</button>
+        <button onclick="clearWalls()">Refresh</button>
+    </div>
+
+    <script>
+        const sliderContainer = document.getElementById('slider-container');
+        const leftNumber = document.getElementById('left-number');
+        const centerNumber = document.getElementById('center-number');
+        const rightNumber = document.getElementById('right-number');
+        let isDraggingInput = false;
+        let startX, currentX;
+        let sliderValue = parseInt(centerNumber.textContent, 10);
+        let accumulatedDx = 0; // To accumulate the distance dragged
+
+        function setNumbers(value) {
+          centerNumber.textContent = value;
+          leftNumber.textContent = value - 1;
+          rightNumber.textContent = value + 1;
+        }
+
+        function resetNumberPositions() {
+          // Apply smooth transition for transform
+          leftNumber.style.transition = 'transform 0.5s ease-out, opacity 0.5s ease-out';
+          centerNumber.style.transition = 'transform 0.5s ease-out, opacity 0.5s ease-out';
+          rightNumber.style.transition = 'transform 0.5s ease-out, opacity 0.5s ease-out';
+
+          // Reset the position of the numbers after the drag
+          leftNumber.style.transform = 'translateX(-85%)';
+          centerNumber.style.transform = 'translateX(-50%)';
+          rightNumber.style.transform = 'translateX(-15%)';
+          leftNumber.style.opacity = 0;
+          rightNumber.style.opacity = 0;
+
+          // Reset transition to avoid affecting other transformations
+          setTimeout(() => {
+            leftNumber.style.transition = '';
+            centerNumber.style.transition = '';
+            rightNumber.style.transition = '';
+          }, 500); // Wait for the transition to complete before removing
+        }
+          function updateNumbers(value) {
+            // Update the numbers during the drag
+            setNumbers(value);
+            // Fade in gray numbers
+            leftNumber.style.opacity = 1;
+            rightNumber.style.opacity = 1;
+          }
+
+          sliderContainer.addEventListener('mousedown', function(e) {
+            isDraggingInput = true;
+            startX = e.clientX;
+            accumulatedDx = 0; // Reset accumulated distance on new drag
+            e.preventDefault(); // Prevent default text selection
+            updateNumbers(sliderValue);
+          });
+
+          document.addEventListener('mousemove', function(e) {
+            if (!isDraggingInput) return;
+            const dx = e.clientX - startX;
+
+            // Adjust the accumulated distance
+            accumulatedDx += dx;
+            startX = e.clientX; // Update startX for the next move event
+
+            if (Math.abs(accumulatedDx) >= 50) {
+              // Determine the direction and update the slider value
+              const numberChange = Math.sign(accumulatedDx);
+              sliderValue -= numberChange; // Subtract because dragging right should decrement the value
+              accumulatedDx -= numberChange * 50; // Subtract the processed distance
+              updateNumbers(sliderValue);
+            }
+
+            // Adjust the position of the numbers during the drag
+            leftNumber.style.transform = `translateX(${(-85 + accumulatedDx * 0.65)}%)`;
+            centerNumber.style.transform = `translateX(${-50 + accumulatedDx * 0.65}%)`;
+            rightNumber.style.transform = `translateX(${(-15 + accumulatedDx * 0.65)}%)`;
+          });
+
+          document.addEventListener('mouseup', function() {
+            if (isDraggingInput) {
+              isDraggingInput = false;
+              resetNumberPositions();
+            }
+          });
+
+          document.addEventListener('mouseleave', function() {
+            if (isDraggingInput) {
+              isDraggingInput = false;
+              resetNumberPositions();
+            }
+          });
+        let startMouseY = 0;
+        let startValue = 0;
+
+        let wallLastPositions={};
+
+        document.getElementById("slider-container").addEventListener("mousedown", function(e) {
+            startMouseY = e.clientY;
+            startValue = parseInt(this.value, 10);
+            this.style.cursor = 'ns-resize'; // Change cursor to resize indicator
+        });
+
+        function clearWalls() {
+            walls = [];
+            cancelAnimationFrame(animationFrameId); // Cancel any ongoing animation frame
+            initBalls(); // Re-initialize balls
+        }
+
+        function animate() {
+            frameIndex+=1;
+            if(frameIndex>100){
+                frameIndex=1;
+            }
+            // console.log(frameIndex);
+            walls.forEach(function(wall, index) {
+                if (!wallLastPositions[index]) {
+                    // 처음 위치를 기록하는 경우
+                    wallLastPositions[index] = {start:{...wall.start},end:{...wall.end} };
+                } else {
+                    // 속도 계산: (현재 위치 - 마지막 위치) / 시간
+                    let startPointSpeedX=wall.start.x-wallLastPositions[index].start.x;
+                    let startPointSpeedY=wall.start.y-wallLastPositions[index].start.y;
+                    if(startPointSpeedX!=0){
+                      wall.speedX=startPointSpeedX;
+                    }else{
+                      wall.speedX=wall.end.x-wallLastPositions[index].end.x;
+                    }
+                    if(startPointSpeedY!=0){
+                      wall.speedY=startPointSpeedY;
+                    }else{
+                      wall.speedY=wall.end.y-wallLastPositions[index].end.y;
+                    }
+                    // 마지막 위치 업데이트
+                    wallLastPositions[index].start={...wall.start};
+                    wallLastPositions[index].end={...wall.end};
+                }
+            });
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear canvas
+            drawWalls(); // Draw all walls
+            updateBalls(balls); // Update the position of all balls
+            balls.forEach(drawBall); // Draw all balls
+            drawUI();
+            drawSizeUI();
+            animationFrameId = requestAnimationFrame(animate); // Loop the animation
+        }
+
+        function drawPreview() {
+            // console.log("Hello");
+            ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear canvas for drawing preview
+            drawWalls(); // Redraw existing walls and preview wall
+            balls.forEach(drawBall); // Redraw balls without updating their positions
+        }
+
+        document.addEventListener("mouseup", function(e) {
+            document.getElementById("slider-container").style.cursor = 'default'; // Reset cursor
+        });
+   
+        var canvas = document.getElementById("myCanvas");
+        var ctx = canvas.getContext("2d");
+        var balls = [];
+        var walls = [];
+        var wallType = 'rectangle'; // Default wall type
+        var isDragging = false;
+        var dragStartPoint = null;
+        var animationFrameId;
+        let selectedWall = null;
+
+        let draggingWall = false;
+        let dragOffsetX = 0;
+        let dragOffsetY = 0;
+        let reverseOffsetX=0;
+        let reverseOffsetY=0;
+       
+        // 마우스 위치에 따른 벽과 X 아이콘 감지 변수
+        let hoveredWallIndex = -1;
+        let iconIndex=-1;
+        const closeIconSize = 8; // X 아이콘 크기
+
+        let frameIndex=0;
+        let collideIndex=0;
+
+        var previewWall = null; // New variable for the live preview wall
+
+        // 마우스 다운 이벤트 핸들러
+        canvas.addEventListener('mousedown', function(e) {
+            const mouseX = e.offsetX;
+            const mouseY = e.offsetY;
+            selectedWall = walls.find(wall =>
+                mouseX >= wall.start.x && mouseX <= wall.end.x &&
+                mouseY >= wall.start.y && mouseY <= wall.end.y);
+
+            if (selectedWall) {
+                draggingWall = true;
+                dragOffsetX = mouseX - selectedWall.start.x;
+                dragOffsetY = mouseY - selectedWall.start.y;
+                reverseOffsetX=selectedWall.end.x-mouseX;
+                reverseOffsetY=selectedWall.end.y-mouseY;
+            }
+            else{
+                isDragging = true;
+                dragStartPoint = { x: e.offsetX, y: e.offsetY };
+                previewWall = { // Initialize the preview wall instead of adding to walls array
+                    type: wallType,
+                    start: dragStartPoint,
+                    end: dragStartPoint
+                };
+            }
+        });
+
+        // 마우스 업 이벤트 핸들러
+        canvas.addEventListener('mouseup', function(e) {
+            draggingWall = false;
+        });
+     
+        function setWallType(type) {
+            wallType = type;
+            document.getElementById('btnRectangle').classList.remove('active');
+            document.getElementById('btnLine').classList.remove('active');
+
+            if (type === 'rectangle') {
+                document.getElementById('btnRectangle').classList.add('active');
+            } else {
+                document.getElementById('btnLine').classList.add('active');
+            }
+        }
+
+        canvas.addEventListener('mouseup', function(e) {
+            if (isDragging) {
+                isDragging = false;
+                previewWall.end = { x: e.offsetX, y: e.offsetY };
+                if (previewWall.start.x !== previewWall.end.x || previewWall.start.y !== previewWall.end.y) {
+                    if(previewWall.type==='rectangle'){
+                        if(previewWall.start.x>previewWall.end.x){
+                        let storePointX=previewWall.start.x;
+                        previewWall.start.x=previewWall.end.x;
+                        previewWall.end.x=storePointX;
+                    }
+                    if(previewWall.start.y>previewWall.end.y){
+                        let storePointY=previewWall.start.y;
+                        previewWall.start.y=previewWall.end.y;
+                        previewWall.end.y=storePointY;
+                    }
+                    }
+                    walls.push(previewWall);
+                }
+                previewWall = null; // Clear the preview wall
+                drawPreview(); // Finalize drawing without updating balls
+            }
+        });
+
+        canvas.addEventListener('mousemove', function(e) {
+            if (isDragging && previewWall) {
+                previewWall.end = { x: e.offsetX, y: e.offsetY };
+                drawPreview(); // Only redraw the preview, not updating balls
+            }
+            else if (draggingWall && selectedWall) {
+                // console.log(iconIndex);
+                const width = selectedWall.end.x - selectedWall.start.x;
+                const height = selectedWall.end.y - selectedWall.start.y;
+
+                if(iconIndex==-1){
+                    let newStartX = e.offsetX - dragOffsetX;
+                    let newStartY = e.offsetY - dragOffsetY;
+
+                    if(newStartX<0){
+                        newStartX=0;
+                    }
+                    else if(newStartX+width>canvas.width){
+                        newStartX=canvas.width-width;
+                    }
+                    if(newStartY<0){
+                        newStartY=0;
+                    }
+                    else if(newStartY+height>canvas.height){
+                        newStartY=canvas.height-height;
+                    }
+
+                    selectedWall.start.x = newStartX;
+                    selectedWall.start.y = newStartY;
+                    selectedWall.end.x = newStartX + width;
+                    selectedWall.end.y = newStartY + height;
+                }
+                else if(iconIndex==1){
+                    let newStartX=e.offsetX-dragOffsetX;
+                    let newStartY=e.offsetY-dragOffsetY;
+                    if(newStartX<0){
+                        selectedWall.start.x=0;
+                    }
+                    else{
+                        selectedWall.start.x=newStartX;
+                    }
+                    if(newStartY<0){
+                        selectedWall.start.y=0;
+                    }
+                    else{
+                        selectedWall.start.y=newStartY;
+                    }
+                }
+                else if(iconIndex==2){
+                    let newStartX=e.offsetX-dragOffsetX;
+                    let newEndY=e.offsetY+reverseOffsetY;
+                    if(newStartX<0){
+                        selectedWall.start.x=0;
+                    }
+                    else{
+                        selectedWall.start.x=newStartX;
+                    }
+                    if(newEndY>canvas.height){
+                        selectedWall.end.y=canvas.height;
+                    }
+                    else{
+                        selectedWall.end.y=newEndY;
+                    }
+                }
+                else if(iconIndex==3){
+                    let newEndX=e.offsetX+reverseOffsetX;
+                    let newEndY=e.offsetY+reverseOffsetY;
+                    if(newEndX>canvas.width){
+                        selectedWall.end.x=canvas.width;
+                    }else{
+                        selectedWall.end.x=newEndX;
+                    }
+                    if(newEndY>canvas.height){
+                        selectedWall.end.y=canvas.height;
+                    }else{
+                        selectedWall.end.y=newEndY;
+                    }
+                }
+                else if(iconIndex==4){
+                    let newEndX=e.offsetX+reverseOffsetX;
+                    let newStartY=e.offsetY-dragOffsetY;
+                    if(newEndX>canvas.width){
+                        selectedWall.end.x=canvas.width;
+                    }else{
+                        selectedWall.end.x=newEndX;
+                    }
+                    if(newStartY<0){
+                        selectedWall.start.y=0;
+                    }else{
+                        selectedWall.start.y=newStartY;
+                    }
+                }
+                drawPreview(); // 캔버스를 다시 그리는 함수, 벽의 위치가 업데이트 될 때마다 호출해야 합니다.
+            }
+            else{
+                // console.log(hoveredWallIndex);
+                const mouseX = e.offsetX;
+                const mouseY = e.offsetY;
+                hoveredWallIndex = -1; // 초기화
+                iconIndex=-1;
+
+                // 모든 벽에 대해 마우스 위치가 벽 내부인지 확인
+                walls.forEach((wall, index) => {
+                    if (wall.type === 'rectangle' &&
+                        mouseX > wall.start.x && mouseX < wall.end.x &&
+                        mouseY > wall.start.y && mouseY < wall.end.y) {
+                        // 마우스가 벽 위에 있으면 해당 벽의 인덱스 저장
+                        hoveredWallIndex = index;
+                    }
+                });
+                if(hoveredWallIndex !== -1){
+                    const wall=walls[hoveredWallIndex];
+                    const wallWidth=wall.end.x-wall.start.x;
+                    const clickArea = {
+                        x: wall.start.x+wallWidth/2 - 10, // X 아이콘의 대략적인 위치
+                        y: wall.start.y,
+                        width: 20, // X 아이콘의 크기
+                        height: 20
+                    };
+                    if (e.offsetX >= clickArea.x && e.offsetX <= clickArea.x + clickArea.width &&
+                        e.offsetY >= clickArea.y && e.offsetY <= clickArea.y + clickArea.height) {
+                        iconIndex=0;
+                        drawUI()
+                    }
+                    else if(e.offsetX>=wall.start.x&&e.offsetX<=wall.start.x+20&&
+                        e.offsetY>=wall.start.y&&e.offsetY<=wall.start.y+20){
+                        iconIndex=1;
+                    }
+                    else if(e.offsetX>=wall.start.x&&e.offsetX<=wall.start.x+20&&
+                        e.offsetY>=wall.end.y-20&&e.offsetY<=wall.end.y){
+                        iconIndex=2;
+                    }
+                    else if(e.offsetX>=wall.end.x-20&&e.offsetX<=wall.end.x&&
+                        e.offsetY>=wall.end.y-20&&e.offsetY<=wall.end.y){
+                        iconIndex=3;
+                    }
+                    else if(e.offsetX>=wall.end.x-20&&e.offsetX<=wall.end.x&&
+                        e.offsetY>=wall.start.y&&e.offsetY<=wall.start.y+20){
+                        iconIndex=4;
+                    }
+                    // console.log(iconIndex);
+                    drawSizeUI()
+                }
+            }
+            // console.log(hoveredWallIndex)
+        });
+        canvas.addEventListener('click', function(e) {
+            if (hoveredWallIndex !== -1) {
+                // X 아이콘의 클릭 가능 영역 계산 (예시로 간단하게 설정)
+                if(iconIndex==0){
+                    // X 아이콘이 클릭되면 해당 벽을 제거
+                    walls.splice(hoveredWallIndex, 1);
+                    hoveredWallIndex = -1; // 선택된 벽 인덱스 리셋
+                    iconIndex=-1;
+                }
+            }
+        });
+        function drawSizeUI(){
+            // console.log('Hello');
+            if(hoveredWallIndex!==-1){
+                const wall=walls[hoveredWallIndex];
+                ctx.beginPath();
+                ctx.strokeStyle='#ddd';
+                ctx.lineWidth=2;
+                if(iconIndex==1){
+                    ctx.strokeStyle="#444";
+                }
+                ctx.moveTo(wall.start.x+5,wall.start.y+10);
+                ctx.lineTo(wall.start.x+10,wall.start.y+5);
+                ctx.moveTo(wall.start.x+5,wall.start.y+15);
+                ctx.lineTo(wall.start.x+15,wall.start.y+5);
+                ctx.moveTo(wall.start.x+5,wall.start.y+20);
+                ctx.lineTo(wall.start.x+20,wall.start.y+5);
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.strokeStyle='#ddd';
+                if(iconIndex==2){
+                    ctx.strokeStyle="#444";
+                }
+                ctx.moveTo(wall.start.x+5,wall.end.y-10);
+                ctx.lineTo(wall.start.x+10,wall.end.y-5);
+                ctx.moveTo(wall.start.x+5,wall.end.y-15);
+                ctx.lineTo(wall.start.x+15,wall.end.y-5);
+                ctx.moveTo(wall.start.x+5,wall.end.y-20);
+                ctx.lineTo(wall.start.x+20,wall.end.y-5);
+                ctx.stroke();
+
+                ctx.beginPath();  
+                ctx.strokeStyle='#ddd';
+                if(iconIndex==3){
+                    ctx.strokeStyle="#444";
+                }
+                ctx.moveTo(wall.end.x-5,wall.end.y-10);
+                ctx.lineTo(wall.end.x-10,wall.end.y-5);
+                ctx.moveTo(wall.end.x-5,wall.end.y-15);
+                ctx.lineTo(wall.end.x-15,wall.end.y-5);
+                ctx.moveTo(wall.end.x-5,wall.end.y-20);
+                ctx.lineTo(wall.end.x-20,wall.end.y-5);
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.strokeStyle='#ddd';
+                if(iconIndex==4){
+                    ctx.strokeStyle="#444";
+                }
+                ctx.moveTo(wall.end.x-5,wall.start.y+10);
+                ctx.lineTo(wall.end.x-10,wall.start.y+5);
+                ctx.moveTo(wall.end.x-5,wall.start.y+15);
+                ctx.lineTo(wall.end.x-15,wall.start.y+5);
+                ctx.moveTo(wall.end.x-5,wall.start.y+20);
+                ctx.lineTo(wall.end.x-20,wall.start.y+5);
+                ctx.stroke();
+            }
+        }
+
+        // draw 함수 내에서 X 아이콘을 그리는 부분 수정
+        function drawCloseIcon(x, y) {
+            if(!iconIndex){  //closeIconColor===true
+                ctx.beginPath();
+                ctx.arc(x, y, 10, 0, Math.PI*2);    //radius=10
+                ctx.fillStyle = '#ccc';
+                ctx.fill();
+                ctx.closePath();
+            }
+
+            ctx.beginPath();
+            if(iconIndex){
+                ctx.strokeStyle = '#ccc'; // X 아이콘의 색상 설정
+            }
+            else{
+                ctx.strokeStyle='#444';
+            }
+            ctx.lineWidth = 1.5; // 선의 두께
+            // X 아이콘 그리기
+            ctx.moveTo(x - closeIconSize / 2, y - closeIconSize / 2);
+            ctx.lineTo(x + closeIconSize / 2, y + closeIconSize / 2);
+            ctx.moveTo(x + closeIconSize / 2, y - closeIconSize / 2);
+            ctx.lineTo(x - closeIconSize / 2, y + closeIconSize / 2);
+            ctx.stroke();
+        }
+        function drawUI() {
+            // X 아이콘 그리기 로직
+            if (hoveredWallIndex !== -1) {
+                const wall = walls[hoveredWallIndex];
+                const wallWidth=wall.end.x-wall.start.x;
+                drawCloseIcon(wall.start.x +wallWidth/2, wall.start.y + 15);
+            }
+        }
+
+        function clearWalls() {
+            walls = [];
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId); // 애니메이션 프레임 취소
+            }
+            animate(); // 캔버스를 다시 그리기
+            initBalls(); // 공을 다시 초기화
+        }
+
+        // Ball, initBalls, resolveCollision, updateBalls, checkBallWallCollision functions remain unchanged
+         function Ball(x, y, vx, vy, radius) {
+            this.x = x;
+            this.y = y;
+            this.vx = vx;
+            this.vy = vy;
+            this.radius = radius;
+            this.collideIndex=-1;
+            this.prevInside=false;
+        }
+
+        function initBalls() {
+            // if (animationFrameId) {
+            //     cancelAnimationFrame(animationFrameId); // Cancel the previous animation frame
+            // }
+
+            balls = []; // Reset the balls array
+            var numBalls = parseInt(centerNumber.textContent, 10);
+
+            for (var i = 0; i < numBalls; i++) {
+                var radius = 15;
+                var x = Math.random() * (canvas.width - radius * 2) + radius;
+                var y = Math.random() * (canvas.height - radius * 2) + radius;
+                var vx = (Math.random() - 0.5) * 4;
+                var vy = (Math.random() - 0.5) * 4;
+                balls.push(new Ball(x, y, vx, vy, radius));
+            }
+
+            // Restart the animation
+            // draw();
+            if (!animationFrameId) {
+                animate(); // Start animation if not already running
+            }
+        }
+
+        function resolveCollision(ball1, ball2) {
+            // Add collision resolution code here (as in the previous example)
+                        // Add collision resolution code here (as in the previous example)
+                      // Calculate the vector between the balls' centers
+            var dx = ball2.x - ball1.x;
+            var dy = ball2.y - ball1.y;
+            var collisionAngle = Math.atan2(dy, dx);
+
+            // Calculate velocity vectors
+            var speed1 = Math.sqrt(ball1.vx * ball1.vx + ball1.vy * ball1.vy);
+            var speed2 = Math.sqrt(ball2.vx * ball2.vx + ball2.vy * ball2.vy);
+
+            var direction1 = Math.atan2(ball1.vy, ball1.vx);
+            var direction2 = Math.atan2(ball2.vy, ball2.vx);
+
+            // Rotate ball velocities to coordinate system where collision angle is along the x-axis
+            var rotatedVelocityX1 = speed1 * Math.cos(direction1 - collisionAngle);
+            var rotatedVelocityY1 = speed1 * Math.sin(direction1 - collisionAngle);
+            var rotatedVelocityX2 = speed2 * Math.cos(direction2 - collisionAngle);
+            var rotatedVelocityY2 = speed2 * Math.sin(direction2 - collisionAngle);
+
+            // Swap the x-velocities for the collision response
+            var finalVelocityX1 = rotatedVelocityX2;
+            var finalVelocityX2 = rotatedVelocityX1;
+
+            // Rotate the velocities back to the original coordinate system
+            ball1.vx = finalVelocityX1 * Math.cos(collisionAngle) - rotatedVelocityY1 * Math.sin(collisionAngle);
+            ball1.vy = finalVelocityX1 * Math.sin(collisionAngle) + rotatedVelocityY1 * Math.cos(collisionAngle);
+            ball2.vx = finalVelocityX2 * Math.cos(collisionAngle) - rotatedVelocityY2 * Math.sin(collisionAngle);
+            ball2.vy = finalVelocityX2 * Math.sin(collisionAngle) + rotatedVelocityY2 * Math.cos(collisionAngle);
+
+            // Separate the balls to prevent overlap after collision
+            var overlap = 0.5 * (ball1.radius + ball2.radius - Math.sqrt(dx * dx + dy * dy));
+            ball1.x -= overlap * Math.cos(collisionAngle);
+            ball1.y -= overlap * Math.sin(collisionAngle);
+            ball2.x += overlap * Math.cos(collisionAngle);
+            ball2.y += overlap * Math.sin(collisionAngle);
+        }
+
+        function updateBalls(balls) {
+            for (var i = 0; i < balls.length; i++) {
+                var ball = balls[i];
+                ball.x += ball.vx;
+                ball.y += ball.vy;
+
+                // Wall collision
+                if (ball.x + ball.radius > canvas.width) {
+                    ball.x = canvas.width - ball.radius;
+                    ball.vx = -ball.vx;
+                } else if (ball.x - ball.radius < 0) {
+                    ball.x = ball.radius;
+                    ball.vx = -ball.vx;
+                }
+                if (ball.y + ball.radius > canvas.height) {
+                    ball.y = canvas.height - ball.radius;
+                    ball.vy = -ball.vy;
+                } else if (ball.y - ball.radius < 0) {
+                    ball.y = ball.radius;
+                    ball.vy = -ball.vy;
+                }
+            }
+
+            // Ball collisions
+            for (var i = 0; i < balls.length; i++) {
+                for (var j = i + 1; j < balls.length; j++) {
+                    var dx = balls[j].x - balls[i].x;
+                    var dy = balls[j].y - balls[i].y;
+                    var distance = Math.sqrt(dx * dx + dy * dy);
+
+                    if (distance < balls[i].radius + balls[j].radius) {
+                        // Collision detected, resolve it
+                        resolveCollision(balls[i], balls[j]);
+                    }
+                }
+            }
+            balls.forEach(function(ball) {
+                // Check for wall collision
+                checkBallWallCollision(ball);
+            });
+            balls.forEach(ball => {
+                const speed = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
+                // console.log(speed)
+                const maxSpeed = 8; // 최대 속도 제한
+                if (speed > maxSpeed) {
+                    ball.vx = (ball.vx / speed) * maxSpeed;
+                    ball.vy = (ball.vy / speed) * maxSpeed;
+                }
+            });
+        }
+        function checkBallWallCollision(ball) {
+          walls.forEach(function(wall) {
+          if (wall.type === 'line') {
+            // 직선 벽의 경우
+            const lineStart = wall.start;
+            const lineEnd = wall.end;
+
+            // 직선의 방향 벡터 구하기
+            const lineDir = { x: lineEnd.x - lineStart.x, y: lineEnd.y - lineStart.y };
+            const lineLength = Math.sqrt(lineDir.x * lineDir.x + lineDir.y * lineDir.y);
+
+            // 단위 방향 벡터로 정규화
+            const lineDirNorm = { x: lineDir.x / lineLength, y: lineDir.y / lineLength };
+
+            // 공의 중심에서 직선의 시작점까지의 벡터
+            const toBall = { x: ball.x - lineStart.x, y: ball.y - lineStart.y };
+
+            // 공과 직선의 최단 거리 계산
+            const t = Math.max(0, Math.min(lineLength, (toBall.x * lineDirNorm.x + toBall.y * lineDirNorm.y)));
+            const closestPoint = { x: lineStart.x + lineDirNorm.x * t, y: lineStart.y + lineDirNorm.y * t };
+
+            const distToBall = Math.sqrt((ball.x - closestPoint.x) ** 2 + (ball.y - closestPoint.y) ** 2);
+
+            if (distToBall <= ball.radius) {
+                // 법선 벡터 계산
+                const normal = { x: -(lineEnd.y - lineStart.y), y: lineEnd.x - lineStart.x };
+                const normalLength = Math.sqrt(normal.x * normal.x + normal.y * normal.y);
+                const normalNorm = { x: normal.x / normalLength, y: normal.y / normalLength };
+
+                // 공의 속도를 반사 벡터로 업데이트
+                const dotProduct = ball.vx * normalNorm.x + ball.vy * normalNorm.y;
+                ball.vx -= 2 * dotProduct * normalNorm.x;
+                ball.vy -= 2 * dotProduct * normalNorm.y;
+            }
+            const endPoints = [lineStart, lineEnd];
+            endPoints.forEach(function(endPoint) {
+                var dx = ball.x - endPoint.x;
+                var dy = ball.y - endPoint.y;
+                var distance = Math.sqrt(dx * dx + dy * dy);
+                if (distance < ball.radius) {
+                    // 끝점에서 공의 반사 처리
+                    reflectBallFromPoint(ball, endPoint);
+                }
+            });
+        } else if (wall.type === 'rectangle') {
+            // 직사각형 벽과의 충돌 처리 로직 (이전 코드 참조)
+          var cornerCollisionProcessed = false;
+
+          // 꼭짓점 충돌 처리
+          var corners = [{x: wall.start.x, y: wall.start.y}, {x: wall.end.x, y: wall.end.y}];
+          corners.forEach(function(corner) {
+              var dx = ball.x - corner.x;
+              var dy = ball.y - corner.y;
+              var distance = Math.sqrt(dx * dx + dy * dy);
+              if (distance < ball.radius) {
+                  // 꼭짓점 충돌 감지 시 속도 반전
+                  ball.vx = -ball.vx;
+                  ball.vy = -ball.vy;
+                  cornerCollisionProcessed = true;
+
+                  // 공을 꼭짓점으로부터 밀어내기
+                  var angle = Math.atan2(dy, dx);
+                  ball.x = corner.x + Math.cos(angle) * ball.radius;
+                  ball.y = corner.y + Math.sin(angle) * ball.radius;
+              }
+          });
+
+          if (cornerCollisionProcessed) {
+              return; // 꼭짓점 충돌 처리가 완료되면 벽면 충돌 처리를 건너뜁니다.
+          }
+
+          // Calculate wall bounds
+          var top = Math.min(wall.start.y, wall.end.y);
+          var bottom = Math.max(wall.start.y, wall.end.y);
+          var left = Math.min(wall.start.x, wall.end.x);
+          var right = Math.max(wall.start.x, wall.end.x);
+
+          // 벽면 충돌 처리
+          // 공이 벽의 수직 면에 충돌했는지 검사
+          if(ball.x-ball.vx>left && ball.x-ball.vx<right && ball.y-ball.vy>top && ball.y-ball.vy<bottom){
+            ball.prevInside=true;
+          }else{
+            ball.prevInside=false;
+          }
+         
+          if (ball.y + ball.radius > top && ball.y - ball.radius < bottom) {
+              if (ball.x + ball.radius > left && ball.x < left) {
+                  if(wall.speedX==0 || (!(ball.prevInside) && frameIndex-ball.collideIndex!=1 && ball.collideIndex-frameIndex!=99)){
+                    ball.vx = -ball.vx+wall.speedX;
+                  }
+                  ball.x = left - ball.radius;
+                  ball.collideIndex=frameIndex;
+              } else if (ball.x - ball.radius < right && ball.x > right) {
+                  if(wall.speedX==0 || (!(ball.prevInside) && frameIndex-ball.collideIndex!=1 && ball.collideIndex-frameIndex!=99)){
+                    ball.vx = -ball.vx+wall.speedX;
+                  }
+                  ball.x = right + ball.radius;
+                  ball.collideIndex=frameIndex;
+              }
+          }
+
+          // 공이 벽의 수평 면에 충돌했는지 검사
+          if (ball.x + ball.radius > left && ball.x - ball.radius < right) {
+              if (ball.y + ball.radius > top && ball.y < top) {
+                  if(wall.speedY==0 || (!(ball.prevInside) && frameIndex-ball.collideIndex!=1 && ball.collideIndex-frameIndex!=99)){
+                    ball.vy = -ball.vy+wall.speedY;
+                  }
+                  ball.collideIndex=frameIndex;
+                  ball.y = top - ball.radius;
+              } else if (ball.y - ball.radius < bottom && ball.y > bottom) {
+                  if(wall.speedY==0 || (!(ball.prevInside) && frameIndex-ball.collideIndex!=1 && ball.collideIndex-frameIndex!=99)){
+                    ball.vy = -ball.vy+wall.speedY;
+                  }
+                  ball.collideIndex=frameIndex;
+                  ball.y = bottom + ball.radius;
+              }
+          }
+        }
+      });
+  }
+        function reflectBallFromPoint(ball, point) {
+            // 공과 점 사이의 방향 계산
+            var dx = ball.x - point.x;
+            var dy = ball.y - point.y;
+            var angle = Math.atan2(dy, dx);
+
+            // 공의 속도 방향 변경
+            const speed = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
+            // ball.vx = -ball.vx + Math.cos(angle) * 2;
+            // ball.vy = -ball.vy + Math.sin(angle) * 2;
+           
+            ball.vx = Math.cos(angle) * speed;
+            ball.vy = Math.sin(angle) * speed;
+        }
+        function drawWalls() {
+            // Draw permanent walls
+            walls.forEach(function(wall) {
+                drawWall(wall, false); // Draw with standard styling
+            });
+
+            // Draw preview wall if it exists
+            if (previewWall && isDragging) {
+                drawWall(previewWall, true); // Draw with preview styling
+            }
+        }
+
+        // New function to draw a single wall
+        function drawWall(wall, isPreview) {
+            if (wall.type === 'rectangle') {
+                ctx.beginPath();
+                ctx.rect(wall.start.x, wall.start.y, wall.end.x - wall.start.x, wall.end.y - wall.start.y);
+                if (isPreview) {
+                    ctx.strokeStyle = 'rgba(0, 0, 255, 0.5)';
+                    ctx.fillStyle = 'rgba(0, 0, 255, 0.2)';
+                    ctx.fill();
+                } else {
+                    ctx.strokeStyle = '#000';
+                }
+                ctx.stroke();
+            } else if (wall.type === 'line') {
+                ctx.beginPath();
+                ctx.moveTo(wall.start.x, wall.start.y);
+                ctx.lineTo(wall.end.x, wall.end.y);
+                ctx.strokeStyle = isPreview ? 'rgba(0, 255, 0, 0.5)' : '#000'; // 직선 미리보기는 녹색
+                ctx.stroke();
+            }
+        }
+        var ballColor = "#0095DD"; // default color
+
+        function changeBallColor(color) {
+            ballColor = color;
+            document.getElementById("btnRed").classList.remove('active-color')
+            document.getElementById("btnGreen").classList.remove('active-color')
+            document.getElementById("btnBlue").classList.remove('active-color')
+            if(color === '#dd0095'){
+                document.getElementById("btnRed").classList.add('active-color')
+            }
+            else if(color === '#4CAF50'){
+                document.getElementById("btnGreen").classList.add('active-color')
+            }
+            else{
+                document.getElementById("btnBlue").classList.add('active-color')
+            }
+            balls.forEach(function(ball) {
+                drawBall(ball); // Redraw balls with the new color
+            });
+        }
+        // drawBall and draw functions remain unchanged
+        function drawBall(ball) {
+            ctx.beginPath();
+            ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI*2);
+            ctx.fillStyle = ballColor;
+            ctx.fill();
+            ctx.closePath();
+        }
+        // Initialize with default number of balls and wall type
+        initBalls();
+        setWallType('rectangle');
+    </script>
+</body>
+</html>
