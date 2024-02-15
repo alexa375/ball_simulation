@@ -982,7 +982,68 @@
         // drawBall and draw functions remain unchanged
         function drawBall(ball) {
             ctx.beginPath();
-            ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI*2);
+          
+            var isNearWall = -1; // 공이 벽에 가까운지 여부
+            var rx = ball.radius; // 가로 반지름 (원형일 경우와 타원형일 경우 변경될 수 있음)
+            var ry = ball.radius; // 세로 반지름
+            let minStartX=Number.MAX_VALUE;
+            let maxEndX=0;
+            let minStartY=Number.MAX_VALUE;
+            let maxEndY=0;
+
+            // 캔버스의 왼쪽 가장자리 근처에 있는 직사각형 벽을 찾습니다.
+            walls.forEach(function(wall) {
+                if (wall.type === 'rectangle') {
+                    if (ball.x <= ball.radius && ball.y >= wall.start.y && ball.y <= wall.end.y && wall.start.x<=2*ball.radius) {
+                        isNearWall = 0; // 조건을 만족하는 벽을 찾음
+                        if(wall.start.x<minStartX){
+                          minStartX=wall.start.x;
+                        }
+                    }
+                    else if(ball.x>=canvas.width-ball.radius && ball.y>=wall.start.y && ball.y<=wall.end.y && canvas.width-wall.end.x<=2*ball.radius){
+                        isNearWall=1;
+                        if(wall.end.x>maxEndX){
+                          maxEndX=wall.end.x;
+                        }
+                    }
+                    else if(ball.y<=ball.radius&&ball.x>=wall.start.x&&ball.x<=wall.end.x&&wall.start.y<=2*ball.radius){
+                        isNearWall=2;
+                        if(wall.start.y<minStartY){
+                          minStartY=wall.start.y;
+                        }
+                    }
+                    else if(ball.y>=canvas.height-ball.radius && ball.x>=wall.start.x && ball.x<=wall.end.x && canvas.height-wall.end.y<=2*ball.radius){
+                        isNearWall=3;
+                        if(wall.end.y>maxEndY){
+                          maxEndY=wall.end.y;
+                        }
+                    }
+                }
+            });
+
+            if (isNearWall==0) {
+                // 여기에서 공이 벽에 가까울 때의 추가 작업을 수행할 수 있습니다.
+                // 예를 들어, 타원형으로 모양을 변경하기 위해 rx, ry를 조정할 수 있습니다.
+                rx = minStartX * 0.5; // 세로 반지름을 줄여 타원형으로 만듦
+                ctx.ellipse(rx, ball.y, rx, ry, 0, 0, Math.PI * 2);
+            }
+            else if(isNearWall==1){
+                rx=(canvas.width-maxEndX)*0.5;
+                ctx.ellipse(canvas.width-rx,ball.y,rx,ry,0,0,Math.PI * 2);
+            }
+            else if(isNearWall==2){
+                ry=minStartY*0.5;
+                ctx.ellipse(ball.x,ry,rx,ry,0,0,Math.PI * 2);
+            }
+            else if(isNearWall==3){
+                ry=(canvas.height-maxEndY)*0.5;
+                ctx.ellipse(ball.x,canvas.height-ry,rx,ry,0,0,Math.PI * 2);
+            }
+            else {
+                // 공이 벽에 가까우지 않을 때는 원형으로 그립니다.
+                ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI*2);
+            }
+            // ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI*2);
             ctx.fillStyle = ballColor;
             ctx.fill();
             ctx.closePath();
