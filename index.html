@@ -1025,19 +1025,19 @@
                 // 여기에서 공이 벽에 가까울 때의 추가 작업을 수행할 수 있습니다.
                 // 예를 들어, 타원형으로 모양을 변경하기 위해 rx, ry를 조정할 수 있습니다.
                 rx = minStartX * 0.5; // 세로 반지름을 줄여 타원형으로 만듦
-                ctx.ellipse(rx, ball.y, rx, ry, 0, 0, Math.PI * 2);
+                ctx.ellipse(rx, ball.y, rx, 2*ball.radius-rx, 0, 0, Math.PI * 2);
             }
             else if(isNearWall==1){
                 rx=(canvas.width-maxEndX)*0.5;
-                ctx.ellipse(canvas.width-rx,ball.y,rx,ry,0,0,Math.PI * 2);
+                ctx.ellipse(canvas.width-rx,ball.y,rx,2*ball.radius-rx,0,0,Math.PI * 2);
             }
             else if(isNearWall==2){
                 ry=minStartY*0.5;
-                ctx.ellipse(ball.x,ry,rx,ry,0,0,Math.PI * 2);
+                ctx.ellipse(ball.x,ry,2*ball.radius-ry,ry,0,0,Math.PI * 2);
             }
             else if(isNearWall==3){
                 ry=(canvas.height-maxEndY)*0.5;
-                ctx.ellipse(ball.x,canvas.height-ry,rx,ry,0,0,Math.PI * 2);
+                ctx.ellipse(ball.x,canvas.height-ry,2*ball.radius-ry,ry,0,0,Math.PI * 2);
             }
             else {
                 // 공이 벽에 가까우지 않을 때는 원형으로 그립니다.
